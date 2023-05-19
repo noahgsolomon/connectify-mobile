@@ -11,6 +11,7 @@ npm-debug.*
 web-build/
 ../backend/
 ../frontend/
+../mobile/.idea/.gitignore
 # macOS
 .DS_Store
 
