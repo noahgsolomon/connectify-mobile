@@ -1,16 +1,9 @@
 import {useEffect, useState} from 'react';
-import {StyleSheet, Text, View, TouchableOpacity, ActivityIndicator} from 'react-native';
+import {ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View} from 'react-native';
 import {addLikeBookmark, getLikeBookmark} from '../services/postapi.js'
 
 
 const jwtToken = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJub2Foc29sb21vbiIsImlhdCI6MTY4NDU0MDM0NSwiZXhwIjoxNjg1MTQ1MTQ1fQ.AWHJkx73SUrxnxOIMh_IMHgZuRHTn6-0bYIiH1Gpb_w';
-
-const Comment = ({author, text}) => (
-    <View style={styles.comment}>
-        <Text style={styles.commentAuthor}>{author}:</Text>
-        <Text style={styles.commentText}>{text}</Text>
-    </View>
-)
 
 const formatDateAndTime = (dateString) => {
     const dateObj = new Date(dateString);
@@ -32,14 +25,18 @@ const formatDateAndTime = (dateString) => {
     }
 };
 
-function Post({id, title, body, category, username, lastModifiedDate}) {
-
+function Post({id, title, body, category, username, lastModifiedDate, likes, comments}) {
+    console.log(comments);
     const [liked, setLiked] = useState(false);
     const [bookmarked, setBookmarked] = useState(false);
+    const [likeCount, setLikeCount] = useState(likes);
+    const [fetchCompleted, setFetchCompleted] = useState(false);
+
     const [bookmarkBtnStyle, setBookmarkBtnStyle] = useState(styles.bookmarkBtn);
     const [likeBtnStyle, setLikeBtnStyle] = useState(styles.likeBtn);
     const likeText = liked ? '💖' : '❤';
     const bookmarkText = bookmarked ? '📚' : '💾';
+
     const handleLikePress = () => {
         setLiked(prevLiked => !prevLiked);
     };
@@ -54,9 +51,11 @@ function Post({id, title, body, category, username, lastModifiedDate}) {
                 const postInteractions = await getLikeBookmark(id);
                 setLiked(postInteractions.liked);
                 setBookmarked(postInteractions.bookmark);
+                setFetchCompleted(true);
             } catch (error) {
                 console.error(error);
             }
+
         };
 
         fetchData();
@@ -64,20 +63,38 @@ function Post({id, title, body, category, username, lastModifiedDate}) {
 
 
     useEffect(() => {
-        addLikeBookmark(id, liked, bookmarked);
         if (liked) {
             setLikeBtnStyle(styles.likeBtnActive);
-        } else {
+        }
+        else {
             setLikeBtnStyle(styles.likeBtnInactive);
+        }
+        if (fetchCompleted) {
+            addLikeBookmark(id, liked, bookmarked);
+            if (liked) {
+                setLikeCount(likeCount => likeCount + 1);
+                setLikeBtnStyle(styles.likeBtnActive);
+            } else {
+                setLikeCount(likeCount => likeCount - 1);
+                setLikeBtnStyle(styles.likeBtnInactive);
+            }
         }
     }, [liked]);
 
     useEffect( () => {
-        addLikeBookmark(id, liked, bookmarked);
-        if (bookmarked) {
+        if (bookmarked){
             setBookmarkBtnStyle(styles.bookmarkBtnActive);
-        } else {
+        }
+        else {
             setBookmarkBtnStyle(styles.bookmarkBtnInactive);
+        }
+        if (fetchCompleted) {
+            addLikeBookmark(id, liked, bookmarked);
+            if (bookmarked) {
+                setBookmarkBtnStyle(styles.bookmarkBtnActive);
+            } else {
+                setBookmarkBtnStyle(styles.bookmarkBtnInactive);
+            }
         }
     }, [bookmarked]);
 
@@ -92,9 +109,21 @@ function Post({id, title, body, category, username, lastModifiedDate}) {
                     <Text style={styles.date}>{formatDateAndTime(lastModifiedDate)}</Text>
                 </View>
                 <View style={styles.postActions}>
-                    <TouchableOpacity style={likeBtnStyle} onPress={handleLikePress}><Text>{likeText}</Text></TouchableOpacity>
-                    <TouchableOpacity style={bookmarkBtnStyle} onPress={handleBookmarkPress}><Text>{bookmarkText}</Text></TouchableOpacity>
+                    <View style={styles.likeSection}>
+                        <TouchableOpacity style={likeBtnStyle} onPress={handleLikePress}><Text>{likeText}</Text></TouchableOpacity>
+                        <Text style={styles.likeCount}>{likeCount} likes</Text>
+                    </View>
+                    <View style={styles.bookmarkSection}>
+                        <TouchableOpacity style={bookmarkBtnStyle} onPress={handleBookmarkPress}><Text>{bookmarkText}</Text></TouchableOpacity>
+                    </View>
                 </View>
+                <ScrollView style={styles.commentContainer}>
+                    <Text>
+                {comments.map((comment, index) => (
+                    <Comment key={index} {...comment} />
+                ))}
+                    </Text>
+                </ScrollView>
             </View>
     );
 }
@@ -114,7 +143,20 @@ export default function Posts() {
                     }
                 });
 
-                const data = await response.json();
+                let data = await response.json();
+
+                for (let i = 0; i < data.length; i++) {
+                    const postId = data[i].id;
+                    const commentsResponse = await fetch(`https://appconnectify.herokuapp.com/comment/${postId}`,{
+                        method: 'GET',
+                        headers: {'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${jwtToken}`
+                        }
+                    });
+
+                    data[i].comments = await commentsResponse.json();
+                }
+
                 setPosts(data);
             } catch (error) {
                 console.error(error);
@@ -146,6 +188,16 @@ export default function Posts() {
         </View>
     );
 }
+
+const Comment = ({user, content}) => (
+    <View style={styles.comment}>
+        <Text style={styles.commentText}>
+            <Text style={styles.commentAuthor}>{user}: </Text>
+            {content}
+        </Text>
+    </View>
+)
+
 
 const styles = StyleSheet.create({
     postWrapper: {
@@ -179,10 +231,24 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         marginTop: 10,
     },
+    likeSection: {
+        flexDirection: 'column',
+        alignItems: 'center',
+    },
+    bookmarkSection: {
+        flexDirection: 'column'
+    },
     likeBtn: {
         backgroundColor: '#416caa',
         borderRadius: 25,
         padding: 15
+    },
+    likeCount: {
+        color: 'rgba(245,245,245,0.8)',
+        fontSize: 15,
+        fontWeight: 'bold',
+        textAlign: 'center',
+        marginTop: 10
     },
     likeBtnActive: {
         backgroundColor: 'rgb(170, 45, 75)',
@@ -226,34 +292,19 @@ const styles = StyleSheet.create({
         color: 'rgba(187,187,187,0.6)'
     },
     commentContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginTop: 10,
-    },
-    commentField: {
-        flex: 1,
-        borderWidth: 1,
-        borderColor: '#333',
-        borderRadius: 8,
-        marginRight: 10,
-        padding: 8,
-    },
-    seeCommentsContainer: {
-        marginTop: 10,
-    },
-    comments: {
+        maxHeight: 150,
         marginTop: 10,
     },
     comment: {
-        flexDirection: 'row',
-        marginTop: 5,
+        marginTop: 7.5
     },
     commentAuthor: {
+        color: '#9b9b9b',
         fontWeight: 'bold',
-        marginRight: 5,
     },
     commentText: {
-
+        color: '#a4a4a4',
+        flexShrink: 1,
     },
     loadingContainer: {
         justifyContent: 'center',

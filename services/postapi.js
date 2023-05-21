@@ -13,7 +13,7 @@ async function addLikeBookmark(postId, liked, bookmarked) {
             'Authorization': `Bearer ${jwtToken}`},
         body: JSON.stringify(model)
     });
-    console.log(response.body);
+    await response;
 }
 
 async function getLikeBookmark(postId) {
